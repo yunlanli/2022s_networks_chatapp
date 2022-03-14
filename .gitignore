@@ -2,3 +2,4 @@
 .python-version
 chatApp.egg-info
 build/
+kbd.vim
