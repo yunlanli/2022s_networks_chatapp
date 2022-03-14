@@ -205,3 +205,6 @@ def setUp(loggerName: str, logLevel: int):
     logger.setLevel(logLevel)
 
     return logger
+
+
+logger = setUp('chatapp', logging.INFO)
