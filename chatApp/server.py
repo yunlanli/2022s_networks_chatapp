@@ -1,6 +1,9 @@
+import json
 import socket
 
 from .log import logger
+from .message import *
+from .constant import BUF_SIZE
 
 
 class Server:
@@ -9,17 +12,49 @@ class Server:
         self.done = False
         self.port = port
         self.logger = logger
+        self.clients = dict()
+        self.handlers = {
+            REGISTER: self.handle_register,
+            CHAT_MSG: self.handle_chat
+        }
 
         self.logger.info(f"instantiated server @ port {self.port}")
 
+    def client_info_str(self, name):
+        return f"({', '.join(map(str, self.clients[name]))})"
+
     def handle_requests(self):
         while not self.done:
-            msg, client_addr = self.sock.recvfrom(2048)
-            msg = msg.decode()
-            print(f"from {client_addr}: {msg}")
+            msg, client_addr = self.sock.recvfrom(BUF_SIZE)
+            typ, content = parse(msg)
 
-            ack = "ok"
-            self.sock.sendto(ack.encode(), client_addr)
+            self.handlers[typ](client_addr, content)
+
+    def handle_register(self, dest, info):
+        ip, port = dest
+        [name, status] = json.loads(info)
+
+        self.logger.info(f"client @ {ip}:{port} wants to register as {name}.")
+
+        if name not in self.clients:
+            self.logger.info(f"Accepted. Client {name} registered.")
+
+            # TODO: Broadcast updated table to all clients
+            self.clients[name] = [ip, port, status]
+            resp = make(ACK_REG, json.dumps(self.clients))
+            self.sock.sendto(resp, dest)
+        else:
+            self.logger.info(
+                f"Denied. {name} already registered: {self.client_info_str(name)}"
+            )
+            resp = make(NACK_REG)
+            self.sock.sendto(resp, dest)
+
+    def handle_chat(self, dest, message):
+        logger.info(f"message from {dest} received: {message}")
+
+        resp = make(ACK_CHAT_MSG)
+        self.sock.sendto(resp, dest)
 
     def stop(self):
         self.sock.close()
