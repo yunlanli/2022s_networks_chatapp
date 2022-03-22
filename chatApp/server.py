@@ -26,11 +26,11 @@ class Server:
     def handle_requests(self):
         while not self.done:
             msg, client_addr = self.sock.recvfrom(BUF_SIZE)
-            typ, content = parse(msg)
+            typ, id, content = parse(msg)
 
-            self.handlers[typ](client_addr, content)
+            self.handlers[typ](id, client_addr, content)
 
-    def handle_register(self, dest, info):
+    def handle_register(self, id, dest, info):
         ip, port = dest
         [name, status] = json.loads(info)
 
@@ -40,7 +40,7 @@ class Server:
             self.logger.info(f"Accepted. Client {name} registered.")
 
             self.clients[name] = [ip, port, status]
-            resp = make(ACK_REG, json.dumps(self.clients))
+            resp, _ = make(ACK_REG, json.dumps(self.clients), id)
             self.sock.sendto(resp, dest)
 
             # Broadcast new cient to other clients
@@ -50,19 +50,19 @@ class Server:
                     self.logger.info(
                         f"Broadcast new client {name} info: "
                         f"{self.clients[name]} to {client} @ {ip}:{port}")
-                    resp = make(PEERS_UPDATE, updated)
+                    resp, _ = make(PEERS_UPDATE, updated)
                     self.sock.sendto(resp, (ip, port))
         else:
             self.logger.info(
                 f"Denied. {name} already registered: {self.client_info_str(name)}"
             )
-            resp = make(NACK_REG)
+            resp, _ = make(NACK_REG, id=id)
             self.sock.sendto(resp, dest)
 
-    def handle_chat(self, dest, message):
+    def handle_chat(self, id, dest, message):
         logger.info(f"message from {dest} received: {message}")
 
-        resp = make(ACK_CHAT_MSG)
+        resp, _ = make(ACK_CHAT_MSG, id=id)
         self.sock.sendto(resp, dest)
 
     def stop(self):

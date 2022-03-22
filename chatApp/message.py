@@ -2,7 +2,10 @@
 # This file contains functions to create and parse client & server messages
 #
 
+from datetime import datetime
 import uuid
+
+from .constant import TIMEOUT
 
 # A Message can be one of these types
 CHAT_MSG = 0
@@ -23,6 +26,16 @@ typ_to_str = [
 ]
 
 
+def get_ts():
+    return datetime.now().timestamp()
+
+
+def timeout(ts1, ts2):
+    # if more than 500 milisecond,
+    # retrn true otherwise false
+    return ts2 * 1000 - ts1 * 1000 > TIMEOUT
+
+
 def msg_type(typ):
     return typ_to_str[typ]
 
@@ -38,12 +51,15 @@ def shorten_msg(msg):
         return msg
 
 
-def make(typ, content=""):
-    return f"{typ}{delim}{content}".encode()
+def make(typ, content="", id=None):
+    id = msg_id() if id is None else id
+    msg = map(str, [typ, id, content])
+    encoded = f"{delim.join(msg)}".encode()
+    return encoded, id
 
 
 def parse(msg):
     decoded = msg.decode()
-    [typ, content] = decoded.split(delim, 1)
+    [typ, id, content] = decoded.split(delim, 2)
 
-    return int(typ), content
+    return int(typ), id, content
