@@ -39,10 +39,19 @@ class Server:
         if name not in self.clients:
             self.logger.info(f"Accepted. Client {name} registered.")
 
-            # TODO: Broadcast updated table to all clients
             self.clients[name] = [ip, port, status]
             resp = make(ACK_REG, json.dumps(self.clients))
             self.sock.sendto(resp, dest)
+
+            # Broadcast new cient to other clients
+            updated = json.dumps({name: [ip, port, status]})
+            for client, [ip, port, online] in self.clients.items():
+                if online and client != name:
+                    self.logger.info(
+                        f"Broadcast new client {name} info: "
+                        f"{self.clients[name]} to {client} @ {ip}:{port}")
+                    resp = make(PEERS_UPDATE, updated)
+                    self.sock.sendto(resp, (ip, port))
         else:
             self.logger.info(
                 f"Denied. {name} already registered: {self.client_info_str(name)}"

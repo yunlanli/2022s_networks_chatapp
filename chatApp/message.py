@@ -2,6 +2,8 @@
 # This file contains functions to create and parse client & server messages
 #
 
+import uuid
+
 # A Message can be one of these types
 CHAT_MSG = 0
 REGISTER = 1
@@ -11,6 +13,7 @@ NACK_REG = 4
 ACK_DEREG = 5
 NACK_DEREG = 6
 ACK_CHAT_MSG = 7
+PEERS_UPDATE = 8
 
 delim = " "
 
@@ -22,6 +25,10 @@ typ_to_str = [
 
 def msg_type(typ):
     return typ_to_str[typ]
+
+
+def msg_id():
+    return str(uuid.uuid4())
 
 
 def make(typ, content=""):
