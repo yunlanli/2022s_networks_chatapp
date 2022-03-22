@@ -31,6 +31,13 @@ def msg_id():
     return str(uuid.uuid4())
 
 
+def shorten_msg(msg):
+    if len(msg) > 25:
+        return f"{msg[:25]}.."
+    else:
+        return msg
+
+
 def make(typ, content=""):
     return f"{typ}{delim}{content}".encode()
 
