@@ -34,7 +34,8 @@ class Client:
         }
         self.timeout_handlers = {
             DEREGISTER: self.timeout_deregister,
-            CHAT_MSG: self.timeout_chat
+            CHAT_MSG: self.timeout_chat,
+            SAVE_MSG: self.timeout_save
         }
         self.inflight = dict()  # inflight messages/requests
         self.mu = threading.Lock()  # mutext lock for self.inflight
@@ -123,7 +124,7 @@ class Client:
 
     def send_offline_chat(self, msg, peer=None):
         data = f"{peer} {msg}" if peer is not None else msg
-        self.udp_send(SAVE_MSG, data)
+        self.udp_send(SAVE_MSG, data, max_retry=0)
         self.logger.info(
             f"{peer} offline/timeout, send SAVE_MSG to server: {shorten_msg(msg)}"
         )
@@ -198,6 +199,10 @@ class Client:
     def timeout_chat(self, id, addr, data):
         self.send_offline_chat(data)
 
+    def timeout_save(self, id, addr, data):
+        # TODO
+        pass
+
     def listen(self):
         while not self.done:
             resp, server_addr = self.sock.recvfrom(BUF_SIZE)
@@ -210,8 +215,10 @@ class Client:
 
             self.mu.acquire()
 
-            for id, (ts, addr, typ, data, retries) in self.inflight.items():
+            for id in list(self.inflight):
+                (ts, addr, typ, data, retries) = self.inflight[id]
                 has_timeout = timeout(ts, now)
+
                 if has_timeout and retries != 0:
                     # resend message
                     retries -= 1
@@ -230,6 +237,7 @@ class Client:
                         f"No retries left for {id}, dispatching timeout handler"
                     )
                     self.timeout_handlers[typ](id, addr, data)
+                    del self.inflight[id]
 
             self.mu.release()
 
