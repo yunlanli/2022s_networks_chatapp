@@ -30,7 +30,8 @@ class Client:
             ACK_REG: self.handle_ack_reg,
             NACK_REG: self.handle_nack_reg,
             ACK_CHAT_MSG: self.handle_ack_chat_msg,
-            ACK_DEREG: self.handle_ack_dereg
+            ACK_DEREG: self.handle_ack_dereg,
+            ACK_SAVE_MSG: self.handle_ack_save
         }
         self.timeout_handlers = {
             DEREGISTER: self.timeout_deregister,
@@ -166,6 +167,11 @@ class Client:
                              f"{shorten_msg(message)} received.")
 
         self.rm_record(id)
+
+    def handle_ack_save(self, id, addr, message):
+        self.logger.info(f"SAVE_MSG {id} acked by server")
+        self.rm_record(id)
+        print(">>> [Messages received by the server and saved]")
 
     def handle_ack_reg(self, id, addr, message):
         print(">>> [Welcome, You are registered.]")

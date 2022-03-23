@@ -91,6 +91,9 @@ class Server:
     def handle_save(self, id, dest, message):
         logger.info(f"save message from {dest} received: {message}")
 
+        resp, _ = make(ACK_SAVE_MSG, id=id)
+        self.sock.sendto(resp, dest)
+
     def stop(self):
         self.sock.close()
         self.logger.info("server gracefully exited")
