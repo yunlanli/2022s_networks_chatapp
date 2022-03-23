@@ -15,13 +15,25 @@ class Server:
         self.clients = dict()
         self.handlers = {
             REGISTER: self.handle_register,
-            CHAT_MSG: self.handle_chat
+            CHAT_MSG: self.handle_chat,
+            DEREGISTER: self.handle_deregister
         }
 
         self.logger.info(f"instantiated server @ port {self.port}")
 
     def client_info_str(self, name):
         return f"({', '.join(map(str, self.clients[name]))})"
+
+    def broadcast_client_info(self, user):
+        user_info = json.dumps({user: self.clients[user]})
+
+        for client, [ip, port, online] in self.clients.items():
+            if online and client != user:
+                self.logger.info(
+                    f"Broadcast client {user} info: "
+                    f"{self.clients[user]} to {client} @ {ip}:{port}")
+                resp, _ = make(PEERS_UPDATE, user_info)
+                self.sock.sendto(resp, (ip, port))
 
     def handle_requests(self):
         while not self.done:
@@ -43,21 +55,31 @@ class Server:
             resp, _ = make(ACK_REG, json.dumps(self.clients), id)
             self.sock.sendto(resp, dest)
 
-            # Broadcast new cient to other clients
-            updated = json.dumps({name: [ip, port, status]})
-            for client, [ip, port, online] in self.clients.items():
-                if online and client != name:
-                    self.logger.info(
-                        f"Broadcast new client {name} info: "
-                        f"{self.clients[name]} to {client} @ {ip}:{port}")
-                    resp, _ = make(PEERS_UPDATE, updated)
-                    self.sock.sendto(resp, (ip, port))
+            self.broadcast_client_info(name)
         else:
             self.logger.info(
                 f"Denied. {name} already registered: {self.client_info_str(name)}"
             )
             resp, _ = make(NACK_REG, id=id)
             self.sock.sendto(resp, dest)
+
+    def handle_deregister(self, id, dest, info):
+        ip, port = dest
+        name = info
+
+        self.logger.info(f"client {name} @ {ip}:{port} wants to de-register.")
+
+        # mark client as offline
+        self.clients[name][2] = False
+
+        self.logger.info(f"de-registered client {name} @ {ip}:{port}.")
+
+        # ack
+        resp, _ = make(ACK_DEREG, id=id)
+        self.sock.sendto(resp, dest)
+
+        # broadcast updated client info
+        self.broadcast_client_info(name)
 
     def handle_chat(self, id, dest, message):
         logger.info(f"message from {dest} received: {message}")

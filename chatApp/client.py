@@ -29,7 +29,8 @@ class Client:
             CHAT_MSG: self.handle_chat_msg,
             ACK_REG: self.handle_ack_reg,
             NACK_REG: self.handle_nack_reg,
-            ACK_CHAT_MSG: self.handle_ack_chat_msg
+            ACK_CHAT_MSG: self.handle_ack_chat_msg,
+            ACK_DEREG: self.handle_ack_dereg
         }
         self.inflight = dict()  # inflight messages/requests
         self.mu = threading.Lock()  # mutext lock for self.inflight
@@ -66,15 +67,24 @@ class Client:
 
         self.mu.release()
 
+    def udp_send(self, typ, data):
+        encoded, id = make(typ, data)
+        dest = (self.server, self.sport)
+
+        self.sock.sendto(encoded, dest)
+        self.record(id, dest, encoded)
+
     def send(self):
         while not self.done:
             message = input('>>> ')
 
-            # TODO: parse command
             send = re.match(r"send (?P<name>.*?) (?P<msg>.*)$", message)
+            dereg = re.match(r"dereg (?P<name>.*?)$", message)
 
             if send is not None:
                 self.send_chat(send.group('name'), send.group('msg'))
+            elif dereg is not None:
+                self.deregister(dereg.group('name'))
             else:
                 # TODO
                 encoded, id = make(CHAT_MSG, message)
@@ -144,17 +154,20 @@ class Client:
         self.logger.error(f"{self.username} already registered, abort.")
         self.done = True
 
+    def handle_ack_dereg(self, id, addr, message):
+        print(">>> [You are Offline. Bye.]")
+
+        # mark ourselve as offline
+        self.peers[self.username][2] = False
+        self.rm_record(id)
+
     def register(self):
         # register under self.username at the server
         info = json.dumps([self.username, True])
-        encoded, id = make(REGISTER, info)
-        dest = (self.server, self.sport)
+        self.udp_send(REGISTER, info)
 
-        self.sock.sendto(encoded, dest)
-        self.record(id, dest, encoded)
-
-    def deregister(self):
-        pass
+    def deregister(self, client):
+        self.udp_send(DEREGISTER, client)
 
     def listen(self):
         while not self.done:
@@ -171,8 +184,11 @@ class Client:
                 if timeout(ts, now):
                     # resend message
                     # TODO: different action based on message type
-                    new_ts = get_ts()
                     self.sock.sendto(data, addr)
+
+                    # update timestemp
+                    # TODO: different action based on message type
+                    new_ts = get_ts()
                     self.inflight[id] = (new_ts, addr, data)
             self.mu.release()
 
@@ -181,7 +197,6 @@ class Client:
     def stop(self):
         self.done = True
         self.sock.close()
-        self.deregister()
         self.logger.info(f"client {self.username} gracefully exited")
 
     def start(self):
