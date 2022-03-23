@@ -31,7 +31,8 @@ class Client:
             NACK_REG: self.handle_nack_reg,
             ACK_CHAT_MSG: self.handle_ack_chat_msg,
             ACK_DEREG: self.handle_ack_dereg,
-            ACK_SAVE_MSG: self.handle_ack_save
+            ACK_SAVE_MSG: self.handle_ack_save,
+            NACK_SAVE_MSG: self.handle_nack_save
         }
         self.timeout_handlers = {
             DEREGISTER: self.timeout_deregister,
@@ -175,6 +176,23 @@ class Client:
         self.logger.info(f"SAVE_MSG {id} acked by server")
         self.rm_record(id)
         print(">>> [Messages received by the server and saved]")
+
+    def handle_nack_save(self, id, addr, message):
+        self.logger.info(
+            f"SAVE_MSG {id} nacked by server, resend chat directly to peer.")
+
+        self.peers = json.loads(message)
+        print(">>> [Client table updated.]")
+
+        # resend chat message directly to peer
+        self.mu.acquire()
+        data = self.inflight[id][3]
+        peer, msg = data.split(" ", maxsplit=1)
+        dest = (self.peers[peer][0], self.peers[peer][1])
+        self.mu.release()
+
+        self.rm_record(id)
+        self.udp_send(CHAT_MSG, message, dest=dest, max_retry=0)
 
     def handle_ack_reg(self, id, addr, message):
         print(">>> [Welcome, You are registered.]")

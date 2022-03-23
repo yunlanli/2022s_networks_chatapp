@@ -112,9 +112,20 @@ class Server:
 
     def handle_save(self, id, dest, message):
         logger.info(f"save message from {dest} received: {message}")
+        [to, msg] = message.split(" ", maxsplit=1)
 
-        resp, _ = make(ACK_SAVE_MSG, id=id)
-        self.sock.sendto(resp, dest)
+        # Client side ensures that `to` is a client
+        # to not in self.clients will not occur
+        online = self.clients[to][2]
+
+        if online:
+            print(f">>> [Client {to} exists!!]")
+            resp, _ = make(NACK_SAVE_MSG, json.dumps(self.clients), id=id)
+            self.sock.sendto(resp, dest)
+        else:
+            # TODO: save message for client `to`
+            resp, _ = make(ACK_SAVE_MSG, id=id)
+            self.sock.sendto(resp, dest)
 
     def stop(self):
         self.sock.close()
