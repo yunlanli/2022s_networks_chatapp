@@ -13,6 +13,7 @@ class Server:
         self.port = port
         self.logger = logger
         self.clients = dict()
+        self.msg_store = dict()
         self.handlers = {
             REGISTER: self.handle_register,
             CHAT_MSG: self.handle_chat,
@@ -35,6 +36,16 @@ class Server:
                     f"{self.clients[user]} to {client} @ {ip}:{port}")
                 resp, _ = make(PEERS_UPDATE, user_info)
                 self.sock.sendto(resp, (ip, port))
+
+    def save_msg(self, client, msg):
+        timestamp = get_ts()
+
+        if client in self.msg_store:
+            self.msg_store[client].append((timestamp, msg))
+        else:
+            self.msg_store[client] = [(timestamp, msg)]
+
+        self.logger.info(f"Message {shorten_msg(msg)} for {client} saved!")
 
     def handle_requests(self):
         while not self.done:
@@ -119,11 +130,11 @@ class Server:
         online = self.clients[to][2]
 
         if online:
-            print(f">>> [Client {to} exists!!]")
             resp, _ = make(NACK_SAVE_MSG, json.dumps(self.clients), id=id)
             self.sock.sendto(resp, dest)
         else:
-            # TODO: save message for client `to`
+            self.save_msg(to, msg)
+
             resp, _ = make(ACK_SAVE_MSG, id=id)
             self.sock.sendto(resp, dest)
 

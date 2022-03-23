@@ -182,7 +182,6 @@ class Client:
             f"SAVE_MSG {id} nacked by server, resend chat directly to peer.")
 
         self.peers = json.loads(message)
-        print(">>> [Client table updated.]")
 
         # resend chat message directly to peer
         self.mu.acquire()
@@ -190,6 +189,9 @@ class Client:
         peer, msg = data.split(" ", maxsplit=1)
         dest = (self.peers[peer][0], self.peers[peer][1])
         self.mu.release()
+
+        print(f">>> [Client {peer} exists!!]")
+        print(">>> [Client table updated.]")
 
         self.rm_record(id)
         self.udp_send(CHAT_MSG, message, dest=dest, max_retry=0)
