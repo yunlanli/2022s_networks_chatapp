@@ -32,7 +32,10 @@ class Client:
             ACK_CHAT_MSG: self.handle_ack_chat_msg,
             ACK_DEREG: self.handle_ack_dereg
         }
-        self.timeout_handlers = {DEREGISTER: self.timeout_deregister}
+        self.timeout_handlers = {
+            DEREGISTER: self.timeout_deregister,
+            CHAT_MSG: self.timeout_chat
+        }
         self.inflight = dict()  # inflight messages/requests
         self.mu = threading.Lock()  # mutext lock for self.inflight
         self.done = False
@@ -111,11 +114,19 @@ class Client:
     def send_chat(self, peer, msg):
         if peer not in self.peers:
             self.logger.error(f"can't send to {peer}, not in local table")
+        elif not self.peers[peer][2]:
+            # peer offline, send SAVE_MSG to server
+            self.send_offline_chat(msg, peer)
         else:
-            # if the user is offline, we will not recieve an ack
-            # timeout will take care of sending the msg to the server
-            self.udp_send(CHAT_MSG, msg, dest=peer)
+            self.udp_send(CHAT_MSG, msg, dest=peer, max_retry=0)
             self.logger.info(f"{peer} online, sending: {shorten_msg(msg)}")
+
+    def send_offline_chat(self, msg, peer=None):
+        data = f"{peer} {msg}" if peer is not None else msg
+        self.udp_send(SAVE_MSG, data)
+        self.logger.info(
+            f"{peer} offline/timeout, send SAVE_MSG to server: {shorten_msg(msg)}"
+        )
 
     def update_peers(self, id, addr, message):
         for peer, info in json.loads(message).items():
@@ -184,6 +195,9 @@ class Client:
         print(">>> [Exiting]")
         self.stop()
 
+    def timeout_chat(self, id, addr, data):
+        self.send_offline_chat(data)
+
     def listen(self):
         while not self.done:
             resp, server_addr = self.sock.recvfrom(BUF_SIZE)
@@ -198,18 +212,20 @@ class Client:
 
             for id, (ts, addr, typ, data, retries) in self.inflight.items():
                 has_timeout = timeout(ts, now)
-                if has_timeout and retries > 0:
+                if has_timeout and retries != 0:
                     # resend message
                     retries -= 1
+                    retry_str = str(retries) if retries >= 0 else "inf"
                     self.logger.info(
-                        f"Resending {id}, tries left after resend: {retries}")
+                        f"Resending {id}, tries left after resend: {retry_str}"
+                    )
                     self.udp_send(typ,
                                   data,
                                   dest=addr,
                                   max_retry=retries,
                                   id=id,
                                   locked=True)
-                elif has_timeout and retries <= 0:
+                elif has_timeout and retries == 0:
                     self.logger.info(
                         f"No retries left for {id}, dispatching timeout handler"
                     )

@@ -16,7 +16,8 @@ class Server:
         self.handlers = {
             REGISTER: self.handle_register,
             CHAT_MSG: self.handle_chat,
-            DEREGISTER: self.handle_deregister
+            DEREGISTER: self.handle_deregister,
+            SAVE_MSG: self.handle_save
         }
 
         self.logger.info(f"instantiated server @ port {self.port}")
@@ -86,6 +87,9 @@ class Server:
 
         resp, _ = make(ACK_CHAT_MSG, id=id)
         self.sock.sendto(resp, dest)
+
+    def handle_save(self, id, dest, message):
+        logger.info(f"save message from {dest} received: {message}")
 
     def stop(self):
         self.sock.close()
