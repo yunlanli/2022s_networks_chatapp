@@ -105,11 +105,14 @@ class Client:
 
             send = re.match(r"send (?P<name>.*?) (?P<msg>.*)$", message)
             dereg = re.match(r"dereg (?P<name>.*?)$", message)
+            reg = re.match(r"reg (?P<name>.*?)$", message)
 
             if send is not None:
                 self.send_chat(send.group('name'), send.group('msg'))
             elif dereg is not None:
                 self.deregister(dereg.group('name'))
+            elif reg is not None:
+                self.register()
             else:
                 self.logger.error(f"unrecognied command: \"{message}\"")
 

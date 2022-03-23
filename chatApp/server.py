@@ -50,6 +50,7 @@ class Server:
         self.logger.info(f"client @ {ip}:{port} wants to register as {name}.")
 
         if name not in self.clients:
+            # client doesn't exist, register for the first time
             self.logger.info(f"Accepted. Client {name} registered.")
 
             self.clients[name] = [ip, port, status]
@@ -57,7 +58,28 @@ class Server:
             self.sock.sendto(resp, dest)
 
             self.broadcast_client_info(name)
+        elif dest == (ip, port):
+            # same client, re-register
+            online = self.clients[name][2]
+            if online:
+                self.logger.info(
+                    f"client {name} @ {ip}:{port} already registered -> no op, sending ack."
+                )
+                resp, _ = make(ACK_REG, id=id)
+                self.sock.sendto(resp, dest)
+            else:
+                # client went back online
+                # TODO: send saved messages if any
+                self.logger.info(
+                    f"client {name} @ {ip}:{port} went back online, re-registered."
+                )
+                self.clients[name][2] = True
+                resp, _ = make(ACK_REG, json.dumps(self.clients), id)
+                self.sock.sendto(resp, dest)
+
+                self.broadcast_client_info(name)
         else:
+            # an IP has already registered as name, deny request
             self.logger.info(
                 f"Denied. {name} already registered: {self.client_info_str(name)}"
             )
