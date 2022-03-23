@@ -108,6 +108,7 @@ class Client:
             send = re.match(r"send (?P<name>.*?) (?P<msg>.*)$", message)
             dereg = re.match(r"dereg (?P<name>.*?)$", message)
             reg = re.match(r"reg (?P<name>.*?)$", message)
+            send_all = re.match(r"send_all (?P<msg>.*)$", message)
 
             if send is not None:
                 self.send_chat(send.group('name'), send.group('msg'))
@@ -115,6 +116,8 @@ class Client:
                 self.deregister(dereg.group('name'))
             elif reg is not None:
                 self.register()
+            elif send_all is not None:
+                self.send_all(send_all.group('msg'))
             else:
                 self.logger.error(f"unrecognied command: \"{message}\"")
 
@@ -134,6 +137,10 @@ class Client:
         self.logger.info(
             f"{peer} offline/timeout, send SAVE_MSG to server: {shorten_msg(msg)}"
         )
+
+    def send_all(self, msg):
+        self.udp_send(BROADCAST_MSG, msg, max_retry=5)
+        self.logger.info(f"sending {shorten_msg(msg)} to all")
 
     def update_peers(self, id, addr, message):
         for peer, info in json.loads(message).items():

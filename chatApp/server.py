@@ -18,7 +18,8 @@ class Server:
             REGISTER: self.handle_register,
             CHAT_MSG: self.handle_chat,
             DEREGISTER: self.handle_deregister,
-            SAVE_MSG: self.handle_save
+            SAVE_MSG: self.handle_save,
+            BROADCAST_MSG: self.handle_broadcast_msg
         }
 
         self.logger.info(f"instantiated server @ port {self.port}")
@@ -159,6 +160,10 @@ class Server:
 
             resp, _ = make(ACK_SAVE_MSG, id=id)
             self.sock.sendto(resp, dest)
+
+    def handle_broadcast_msg(self, id, dest, info):
+        src = self.find_client_by_addr(dest)
+        self.logger.info(f"BROADCAST_MSG from {src}: {shorten_msg(info)}")
 
     def stop(self):
         self.sock.close()
