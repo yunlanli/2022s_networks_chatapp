@@ -2,6 +2,8 @@
 
 tmux send-keys -Rt cli.3 "pip install ." Enter
 
+sleep 3
+
 tmux send-keys -t cli.2 ^c
 tmux send-keys -t cli.1 ^c
 tmux send-keys -t jason.1 ^c

@@ -48,10 +48,11 @@ class Client:
 
         return None
 
-    def record(self, id, addr, data):
+    def record(self, id, addr, data, max_retry=-1):
+        # max_retry = -1 -> can retry infinite times
         self.mu.acquire()
         ts = get_ts()
-        self.inflight[id] = (ts, addr, data)
+        self.inflight[id] = (ts, addr, data, max_retry)
         self.mu.release()
 
     def rm_record(self, id):
@@ -67,9 +68,13 @@ class Client:
 
         self.mu.release()
 
-    def udp_send(self, typ, data):
+    def udp_send(self, typ, data, peer=None):
         encoded, id = make(typ, data)
         dest = (self.server, self.sport)
+
+        if peer is not None:
+            [ip, port, _] = self.peers[peer]
+            dest = (ip, port)
 
         self.sock.sendto(encoded, dest)
         self.record(id, dest, encoded)
@@ -86,25 +91,15 @@ class Client:
             elif dereg is not None:
                 self.deregister(dereg.group('name'))
             else:
-                # TODO
-                encoded, id = make(CHAT_MSG, message)
-                dest = (self.server, self.sport)
-                self.sock.sendto(encoded, dest)
-                self.record(id, dest, encoded)
-                self.logger.info(f"sending to {self.server}: {message}")
+                self.logger.error(f"unrecognied command: \"{message}\"")
 
     def send_chat(self, peer, msg):
         if peer not in self.peers:
             self.logger.error(f"can't send to {peer}, not in local table")
         else:
-            encoded, id = make(CHAT_MSG, msg)
-            [ip, port, _] = self.peers[peer]
-            dest = (ip, port)
-
             # if the user is offline, we will not recieve an ack
             # timeout will take care of sending the msg to the server
-            self.sock.sendto(encoded, dest)
-            self.record(id, dest, encoded)
+            self.udp_send(CHAT_MSG, msg, peer=peer)
             self.logger.info(f"{peer} online, sending: {shorten_msg(msg)}")
 
     def update_peers(self, id, addr, message):
@@ -180,7 +175,7 @@ class Client:
             now = get_ts()
 
             self.mu.acquire()
-            for id, (ts, addr, data) in self.inflight.items():
+            for id, (ts, addr, data, retries) in self.inflight.items():
                 if timeout(ts, now):
                     # resend message
                     # TODO: different action based on message type
@@ -189,7 +184,7 @@ class Client:
                     # update timestemp
                     # TODO: different action based on message type
                     new_ts = get_ts()
-                    self.inflight[id] = (new_ts, addr, data)
+                    self.inflight[id] = (new_ts, addr, data, retries - 1)
             self.mu.release()
 
             time.sleep(TIMEOUT / 1000)
