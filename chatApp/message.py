@@ -31,6 +31,9 @@ typ_to_str = [
     "ACK_CHAT_MSG"
 ]
 
+REGULAR_MESSAGE = 0
+CHANNEL_MESSAGE = 1
+
 
 def get_ts():
     return datetime.now().timestamp()

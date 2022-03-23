@@ -34,7 +34,8 @@ class Client:
             ACK_SAVE_MSG: self.handle_ack_save,
             NACK_SAVE_MSG: self.handle_nack_save,
             OFFLINE_MSG: self.handle_offline_chat_msg,
-            ACK_BROADCAST_MSG: self.handle_ack_broadcast_msg
+            ACK_BROADCAST_MSG: self.handle_ack_broadcast_msg,
+            BROADCAST_MSG: self.handle_broadcast_msg
         }
         self.timeout_handlers = {
             DEREGISTER: self.timeout_deregister,
@@ -189,8 +190,9 @@ class Client:
         if len(msgs) > 0:
             print(">>> [You have messages]")
 
-        for (timestamp, src, message) in msgs:
-            print(f">>> {src}:  {timestamp} {message}")
+        for (timestamp, src, message, typ) in msgs:
+            prefix = "Channel Message " if typ == CHANNEL_MESSAGE else ""
+            print(f">>> {prefix} {src}:  {timestamp} {message}")
 
     def handle_ack_save(self, id, addr, message):
         self.logger.info(f"SAVE_MSG {id} acked by server")
@@ -219,6 +221,13 @@ class Client:
     def handle_ack_broadcast_msg(self, id, addr, message):
         print(">>> [Message received by Server.]")
         self.rm_record(id)
+
+    def handle_broadcast_msg(self, id, addr, message):
+        [src, msg] = message.split(" ", maxsplit=1)
+
+        print(f">>> [Channel_Message {src}: {msg} ].")
+
+        # TODO: send ack back to the server
 
     def handle_ack_reg(self, id, addr, message):
         print(">>> [Welcome, You are registered.]")

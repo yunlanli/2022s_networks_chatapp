@@ -46,13 +46,14 @@ class Server:
                 resp, _ = make(PEERS_UPDATE, user_info)
                 self.sock.sendto(resp, (ip, port))
 
-    def save_msg(self, src, dest, msg):
+    def save_msg(self, src, dest, msg, typ=REGULAR_MESSAGE):
         timestamp = get_ts()
+        record = (timestamp, src, msg, typ)
 
         if dest in self.msg_store:
-            self.msg_store[dest].append((timestamp, src, msg))
+            self.msg_store[dest].append(record)
         else:
-            self.msg_store[dest] = [(timestamp, src, msg)]
+            self.msg_store[dest] = [record]
 
         self.logger.info(
             f"Message {shorten_msg(msg)} for {dest} from {src} saved!")
@@ -165,10 +166,23 @@ class Server:
         src = self.find_client_by_addr(dest)
         self.logger.info(f"BROADCAST_MSG from {src}: {shorten_msg(info)}")
 
-        # TODO: implement broadcasting
-
+        # send ack to the sender
         resp, _ = make(ACK_BROADCAST_MSG, id=id)
         self.sock.sendto(resp, dest)
+
+        # broadcast
+        for client, [ip, port, online] in self.clients.items():
+            online = self.clients[client][2]
+
+            if client != src and online:
+                data = f"{src} {info}"
+                resp, _ = make(BROADCAST_MSG, data)
+                self.sock.sendto(resp, (ip, port))
+                self.logger.info(
+                    f"broadcast message from {src} to {client}: {shorten_msg(info)}"
+                )
+            elif client != src and not online:
+                self.save_msg(src, client, info, typ=CHANNEL_MESSAGE)
 
     def stop(self):
         self.sock.close()
