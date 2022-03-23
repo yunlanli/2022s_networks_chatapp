@@ -33,7 +33,8 @@ class Client:
             ACK_DEREG: self.handle_ack_dereg,
             ACK_SAVE_MSG: self.handle_ack_save,
             NACK_SAVE_MSG: self.handle_nack_save,
-            OFFLINE_MSG: self.handle_offline_chat_msg
+            OFFLINE_MSG: self.handle_offline_chat_msg,
+            ACK_BROADCAST_MSG: self.handle_ack_broadcast_msg
         }
         self.timeout_handlers = {
             DEREGISTER: self.timeout_deregister,
@@ -214,6 +215,10 @@ class Client:
 
         self.rm_record(id)
         self.udp_send(CHAT_MSG, message, dest=dest, max_retry=0)
+
+    def handle_ack_broadcast_msg(self, id, addr, message):
+        print(">>> [Message received by Server.]")
+        self.rm_record(id)
 
     def handle_ack_reg(self, id, addr, message):
         print(">>> [Welcome, You are registered.]")

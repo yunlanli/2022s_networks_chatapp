@@ -165,6 +165,11 @@ class Server:
         src = self.find_client_by_addr(dest)
         self.logger.info(f"BROADCAST_MSG from {src}: {shorten_msg(info)}")
 
+        # TODO: implement broadcasting
+
+        resp, _ = make(ACK_BROADCAST_MSG, id=id)
+        self.sock.sendto(resp, dest)
+
     def stop(self):
         self.sock.close()
         self.logger.info("server gracefully exited")
