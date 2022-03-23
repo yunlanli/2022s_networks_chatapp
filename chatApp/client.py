@@ -32,6 +32,7 @@ class Client:
             ACK_CHAT_MSG: self.handle_ack_chat_msg,
             ACK_DEREG: self.handle_ack_dereg
         }
+        self.timeout_handlers = {DEREGISTER: self.timeout_deregister}
         self.inflight = dict()  # inflight messages/requests
         self.mu = threading.Lock()  # mutext lock for self.inflight
         self.done = False
@@ -48,12 +49,16 @@ class Client:
 
         return None
 
-    def record(self, id, addr, data, max_retry=-1):
+    def record(self, id, addr, typ, data, max_retry=-1, locked=False):
         # max_retry = -1 -> can retry infinite times
-        self.mu.acquire()
+        if not locked:
+            self.mu.acquire()
+
         ts = get_ts()
-        self.inflight[id] = (ts, addr, data, max_retry)
-        self.mu.release()
+        self.inflight[id] = (ts, addr, typ, data, max_retry)
+
+        if not locked:
+            self.mu.release()
 
     def rm_record(self, id):
         self.mu.acquire()
@@ -68,16 +73,26 @@ class Client:
 
         self.mu.release()
 
-    def udp_send(self, typ, data, peer=None):
-        encoded, id = make(typ, data)
-        dest = (self.server, self.sport)
+    def udp_send(self,
+                 typ,
+                 data,
+                 dest=None,
+                 max_retry=-1,
+                 id=None,
+                 locked=False):
+        encoded, id = make(typ, data, id)
+        addr = None
 
-        if peer is not None:
-            [ip, port, _] = self.peers[peer]
-            dest = (ip, port)
+        if type(dest) == tuple:
+            addr = dest
+        elif type(dest) == str:
+            [ip, port, _] = self.peers[dest]
+            addr = (ip, port)
+        else:
+            addr = (self.server, self.sport)
 
-        self.sock.sendto(encoded, dest)
-        self.record(id, dest, encoded)
+        self.sock.sendto(encoded, addr)
+        self.record(id, addr, typ, data, max_retry, locked)
 
     def send(self):
         while not self.done:
@@ -99,7 +114,7 @@ class Client:
         else:
             # if the user is offline, we will not recieve an ack
             # timeout will take care of sending the msg to the server
-            self.udp_send(CHAT_MSG, msg, peer=peer)
+            self.udp_send(CHAT_MSG, msg, dest=peer)
             self.logger.info(f"{peer} online, sending: {shorten_msg(msg)}")
 
     def update_peers(self, id, addr, message):
@@ -162,7 +177,12 @@ class Client:
         self.udp_send(REGISTER, info)
 
     def deregister(self, client):
-        self.udp_send(DEREGISTER, client)
+        self.udp_send(DEREGISTER, client, max_retry=5)
+
+    def timeout_deregister(self, id, addr, data):
+        print(">>> [Server not responding]")
+        print(">>> [Exiting]")
+        self.stop()
 
     def listen(self):
         while not self.done:
@@ -175,16 +195,26 @@ class Client:
             now = get_ts()
 
             self.mu.acquire()
-            for id, (ts, addr, data, retries) in self.inflight.items():
-                if timeout(ts, now):
-                    # resend message
-                    # TODO: different action based on message type
-                    self.sock.sendto(data, addr)
 
-                    # update timestemp
-                    # TODO: different action based on message type
-                    new_ts = get_ts()
-                    self.inflight[id] = (new_ts, addr, data, retries - 1)
+            for id, (ts, addr, typ, data, retries) in self.inflight.items():
+                has_timeout = timeout(ts, now)
+                if has_timeout and retries > 0:
+                    # resend message
+                    retries -= 1
+                    self.logger.info(
+                        f"Resending {id}, tries left after resend: {retries}")
+                    self.udp_send(typ,
+                                  data,
+                                  dest=addr,
+                                  max_retry=retries,
+                                  id=id,
+                                  locked=True)
+                elif has_timeout and retries <= 0:
+                    self.logger.info(
+                        f"No retries left for {id}, dispatching timeout handler"
+                    )
+                    self.timeout_handlers[typ](id, addr, data)
+
             self.mu.release()
 
             time.sleep(TIMEOUT / 1000)
@@ -193,6 +223,7 @@ class Client:
         self.done = True
         self.sock.close()
         self.logger.info(f"client {self.username} gracefully exited")
+        exit(0)
 
     def start(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
