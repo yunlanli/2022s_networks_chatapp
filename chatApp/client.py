@@ -191,7 +191,7 @@ class Client:
             print(">>> [You have messages]")
 
         for (timestamp, src, message, typ) in msgs:
-            prefix = "Channel Message " if typ == CHANNEL_MESSAGE else ""
+            prefix = "Channel-Message " if typ == CHANNEL_MESSAGE else ""
             print(f">>> {prefix} {src}:  {timestamp} {message}")
 
     def handle_ack_save(self, id, addr, message):
@@ -227,7 +227,9 @@ class Client:
 
         print(f">>> [Channel_Message {src}: {msg} ].")
 
-        # TODO: send ack back to the server
+        # ack server that we have recevied the channel message
+        ack, _ = make(ACK_BROADCAST_MSG, id=id)
+        self.sock.sendto(ack, (self.server, self.sport))
 
     def handle_ack_reg(self, id, addr, message):
         print(">>> [Welcome, You are registered.]")

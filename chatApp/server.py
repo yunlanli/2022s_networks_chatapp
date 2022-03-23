@@ -14,12 +14,14 @@ class Server:
         self.logger = logger
         self.clients = dict()
         self.msg_store = dict()
+        self.inflight = dict()
         self.handlers = {
             REGISTER: self.handle_register,
             CHAT_MSG: self.handle_chat,
             DEREGISTER: self.handle_deregister,
             SAVE_MSG: self.handle_save,
-            BROADCAST_MSG: self.handle_broadcast_msg
+            BROADCAST_MSG: self.handle_broadcast_msg,
+            ACK_BROADCAST_MSG: self.handle_ack_broadcast_msg
         }
 
         self.logger.info(f"instantiated server @ port {self.port}")
@@ -34,6 +36,19 @@ class Server:
 
     def client_info_str(self, name):
         return f"({', '.join(map(str, self.clients[name]))})"
+
+    def record(self, id, addr, typ, data):
+        ts = get_ts()
+        self.inflight[id] = (ts, addr, typ, data)
+
+    def rm_record(self, id):
+        if id in self.inflight:
+            ts = self.inflight[id][0]
+            duration = int(get_ts() * 1000 - ts * 1000)
+
+            del self.inflight[id]
+            self.logger.info(
+                f"msg {id} acked, remove from inflight ({duration}ms)")
 
     def broadcast_client_info(self, user):
         user_info = json.dumps({user: self.clients[user]})
@@ -176,13 +191,19 @@ class Server:
 
             if client != src and online:
                 data = f"{src} {info}"
-                resp, _ = make(BROADCAST_MSG, data)
+                resp, id = make(BROADCAST_MSG, data)
                 self.sock.sendto(resp, (ip, port))
                 self.logger.info(
                     f"broadcast message from {src} to {client}: {shorten_msg(info)}"
                 )
+
+                # TODO: use another thread to check for timeout
+                self.record(id, (ip, port), BROADCAST_MSG, data)
             elif client != src and not online:
                 self.save_msg(src, client, info, typ=CHANNEL_MESSAGE)
+
+    def handle_ack_broadcast_msg(self, id, dest, info):
+        self.rm_record(id)
 
     def stop(self):
         self.sock.close()
