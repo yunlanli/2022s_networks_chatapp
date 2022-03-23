@@ -38,7 +38,8 @@ class Client:
         self.timeout_handlers = {
             DEREGISTER: self.timeout_deregister,
             CHAT_MSG: self.timeout_chat,
-            SAVE_MSG: self.timeout_save
+            SAVE_MSG: self.timeout_save,
+            BROADCAST_MSG: self.timeout_broadcast_msg
         }
         self.inflight = dict()  # inflight messages/requests
         self.mu = threading.Lock()  # mutext lock for self.inflight
@@ -249,6 +250,10 @@ class Client:
     def timeout_save(self, id, addr, data):
         # TODO
         pass
+
+    def timeout_broadcast_msg(self, id, addr, data):
+        print(">>> [Server not responding.]")
+        self.rm_record(id)
 
     def listen(self):
         while not self.done:
