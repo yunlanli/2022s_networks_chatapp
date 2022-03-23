@@ -32,7 +32,8 @@ class Client:
             ACK_CHAT_MSG: self.handle_ack_chat_msg,
             ACK_DEREG: self.handle_ack_dereg,
             ACK_SAVE_MSG: self.handle_ack_save,
-            NACK_SAVE_MSG: self.handle_nack_save
+            NACK_SAVE_MSG: self.handle_nack_save,
+            OFFLINE_MSG: self.handle_offline_chat_msg
         }
         self.timeout_handlers = {
             DEREGISTER: self.timeout_deregister,
@@ -171,6 +172,16 @@ class Client:
                              f"{shorten_msg(message)} received.")
 
         self.rm_record(id)
+
+    def handle_offline_chat_msg(self, id, addr, message):
+
+        msgs = json.loads(message)
+
+        if len(msgs) > 0:
+            print(">>> [You have messages]")
+
+        for (timestamp, src, message) in msgs:
+            print(f">>> {src}:  {timestamp} {message}")
 
     def handle_ack_save(self, id, addr, message):
         self.logger.info(f"SAVE_MSG {id} acked by server")

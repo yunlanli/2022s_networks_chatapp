@@ -23,6 +23,14 @@ class Server:
 
         self.logger.info(f"instantiated server @ port {self.port}")
 
+    def find_client_by_addr(self, addr):
+        user_ip, user_port = addr
+        for name, [ip, port, _] in self.clients.items():
+            if user_ip == ip and user_port == port:
+                return name
+
+        return None
+
     def client_info_str(self, name):
         return f"({', '.join(map(str, self.clients[name]))})"
 
@@ -37,15 +45,22 @@ class Server:
                 resp, _ = make(PEERS_UPDATE, user_info)
                 self.sock.sendto(resp, (ip, port))
 
-    def save_msg(self, client, msg):
+    def save_msg(self, src, dest, msg):
         timestamp = get_ts()
 
-        if client in self.msg_store:
-            self.msg_store[client].append((timestamp, msg))
+        if dest in self.msg_store:
+            self.msg_store[dest].append((timestamp, src, msg))
         else:
-            self.msg_store[client] = [(timestamp, msg)]
+            self.msg_store[dest] = [(timestamp, src, msg)]
 
-        self.logger.info(f"Message {shorten_msg(msg)} for {client} saved!")
+        self.logger.info(
+            f"Message {shorten_msg(msg)} for {dest} from {src} saved!")
+
+    def clear_msg(self, client):
+        msgs = self.msg_store[client] if client in self.msg_store else []
+        self.msg_store.pop(client, None)
+
+        return msgs
 
     def handle_requests(self):
         while not self.done:
@@ -80,10 +95,16 @@ class Server:
                 self.sock.sendto(resp, dest)
             else:
                 # client went back online
-                # TODO: send saved messages if any
                 self.logger.info(
                     f"client {name} @ {ip}:{port} went back online, re-registered."
                 )
+
+                # check for offline messages and send to client if any
+                data = json.dumps(self.clear_msg(name))
+                resp, _ = make(OFFLINE_MSG, data)
+                self.sock.sendto(resp, dest)
+
+                # set client status to true and broadcast table
                 self.clients[name][2] = True
                 resp, _ = make(ACK_REG, json.dumps(self.clients), id)
                 self.sock.sendto(resp, dest)
@@ -123,6 +144,7 @@ class Server:
 
     def handle_save(self, id, dest, message):
         logger.info(f"save message from {dest} received: {message}")
+        src = self.find_client_by_addr(dest)
         [to, msg] = message.split(" ", maxsplit=1)
 
         # Client side ensures that `to` is a client
@@ -133,7 +155,7 @@ class Server:
             resp, _ = make(NACK_SAVE_MSG, json.dumps(self.clients), id=id)
             self.sock.sendto(resp, dest)
         else:
-            self.save_msg(to, msg)
+            self.save_msg(src, to, msg)
 
             resp, _ = make(ACK_SAVE_MSG, id=id)
             self.sock.sendto(resp, dest)
