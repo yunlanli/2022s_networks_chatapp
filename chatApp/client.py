@@ -122,6 +122,8 @@ class Client:
                 self.register()
             elif send_all is not None:
                 self.send_all(send_all.group('msg'))
+            elif message == "":
+                pass
             else:
                 self.logger.error(f"unrecognized command: \"{message}\"")
 
@@ -285,6 +287,8 @@ class Client:
         while not self.done:
             resp, server_addr = self.sock.recvfrom(BUF_SIZE)
             typ, id, data = parse(resp)
+
+            print("")
             self.handlers[typ](id, server_addr, data)
 
     def timeout(self):
@@ -314,6 +318,7 @@ class Client:
                     self.logger.info(
                         f"No retries left for {id}, dispatching timeout handler"
                     )
+                    print("")
                     self.timeout_handlers[typ](id, addr, data)
                     del self.inflight[id]
 
