@@ -33,6 +33,10 @@ Run the program:
 
 ![silent_leave](https://user-images.githubusercontent.com/25857014/160049914-c4bd08be-5c71-440d-b7a5-e52720efd1da.png)
 
+3. demonstartion of server checking client status on receiving save offline message
+
+![status_ack](https://user-images.githubusercontent.com/25857014/160054654-d1c24a36-036e-4563-8056-ad0e09fb9a01.png)
+
 
 # Features
 
