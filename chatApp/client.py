@@ -219,7 +219,7 @@ class Client:
         print(">>> [Client table updated.]")
 
         self.rm_record(id)
-        self.udp_send(CHAT_MSG, message, dest=dest, max_retry=0)
+        self.udp_send(CHAT_MSG, msg, dest=dest, max_retry=0)
 
     def handle_ack_broadcast_msg(self, id, addr, message):
         print(">>> [Message received by Server.]")
