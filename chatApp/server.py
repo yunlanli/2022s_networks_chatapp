@@ -135,9 +135,9 @@ class Server:
             self.sock.sendto(resp, dest)
 
             self.broadcast_client_info(name)
-        elif dest == (ip, port):
-            # same client, re-register
+        elif dest == (self.clients[name][0], self.clients[name][1]):
             online = self.clients[name][2]
+            # same client, re-register
             if online:
                 self.logger.info(
                     f"client {name} @ {ip}:{port} already registered -> no op, sending ack."
