@@ -1,5 +1,7 @@
 import json
 import socket
+import time
+from threading import Thread, Lock
 
 from .log import logger
 from .message import *
@@ -15,13 +17,19 @@ class Server:
         self.clients = dict()
         self.msg_store = dict()
         self.inflight = dict()
+        self.mu = Lock()
         self.handlers = {
             REGISTER: self.handle_register,
             CHAT_MSG: self.handle_chat,
             DEREGISTER: self.handle_deregister,
             SAVE_MSG: self.handle_save,
             BROADCAST_MSG: self.handle_broadcast_msg,
-            ACK_BROADCAST_MSG: self.handle_ack_broadcast_msg
+            ACK_BROADCAST_MSG: self.handle_ack_broadcast_msg,
+            ACK_STATUS: self.handle_status_ack
+        }
+        self.timeout_handlers = {
+            BROADCAST_MSG: self.timeout_broadcast_msg,
+            STATUS: self.timeout_status
         }
 
         self.logger.info(f"instantiated server @ port {self.port}")
@@ -61,6 +69,30 @@ class Server:
                 resp, _ = make(PEERS_UPDATE, user_info)
                 self.sock.sendto(resp, (ip, port))
 
+    def broadcast_chat(self, from_cli, to_cli, chat):
+        [to_ip, to_port, online] = self.clients[to_cli]
+        dest = (to_ip, to_port)
+
+        if online:
+            data = f"{from_cli} {chat}"
+            resp, id = make(BROADCAST_MSG, data)
+            self.sock.sendto(resp, dest)
+            self.logger.info(
+                f"broadcast message from {from_cli} to {to_cli}: {shorten_msg(chat)}"
+            )
+
+            self.record(id, dest, BROADCAST_MSG, data)
+        else:
+            self.save_msg(from_cli, to_cli, chat, typ=CHANNEL_MESSAGE)
+
+    def wait_status(self, id):
+        cond = True
+
+        while cond:
+            self.mu.acquire()
+            cond = id in self.inflight
+            self.mu.release()
+
     def save_msg(self, src, dest, msg, typ=REGULAR_MESSAGE):
         timestamp = get_ts()
         record = (timestamp, src, msg, typ)
@@ -84,7 +116,9 @@ class Server:
             msg, client_addr = self.sock.recvfrom(BUF_SIZE)
             typ, id, content = parse(msg)
 
+            self.mu.acquire()
             self.handlers[typ](id, client_addr, content)
+            self.mu.release()
 
     def handle_register(self, id, dest, info):
         ip, port = dest
@@ -159,23 +193,53 @@ class Server:
         resp, _ = make(ACK_CHAT_MSG, id=id)
         self.sock.sendto(resp, dest)
 
+    def handle_status_ack(self, id, dest, message):
+        client = self.find_client_by_addr(dest)
+
+        if id not in self.inflight:
+            self.logger.info(
+                "The client {client} didn't ack in time (500ms), discarding this message."
+            )
+        else:
+            # update client status, broadcast updated status
+            online = json.loads(message)
+
+            if online != self.clients[client][2]:
+                self.clients[client][2] = online
+                self.broadcast_client_info(client)
+
+            self.rm_record(id)
+
     def handle_save(self, id, dest, message):
         logger.info(f"save message from {dest} received: {message}")
         src = self.find_client_by_addr(dest)
         [to, msg] = message.split(" ", maxsplit=1)
 
-        # Client side ensures that `to` is a client
-        # to not in self.clients will not occur
-        online = self.clients[to][2]
+        # check the status of the client
+        resp, status_id = make(STATUS)
+        self.sock.sendto(resp, dest)
+        self.record(status_id, dest, STATUS, "")
 
-        if online:
-            resp, _ = make(NACK_SAVE_MSG, json.dumps(self.clients), id=id)
-            self.sock.sendto(resp, dest)
-        else:
-            self.save_msg(src, to, msg)
+        def callback(from_cli, to_cli, status_id, save_id, dest, msg):
+            self.wait_status(status_id)
 
-            resp, _ = make(ACK_SAVE_MSG, id=id)
-            self.sock.sendto(resp, dest)
+            self.mu.acquire()
+            online = self.clients[to_cli][2]
+
+            if online:
+                resp, _ = make(NACK_SAVE_MSG,
+                               json.dumps(self.clients),
+                               id=save_id)
+                self.sock.sendto(resp, dest)
+            else:
+                self.save_msg(from_cli, to_cli, msg)
+
+                resp, _ = make(ACK_SAVE_MSG, id=save_id)
+                self.sock.sendto(resp, dest)
+            self.mu.release()
+
+        Thread(target=callback,
+               args=(src, to, status_id, id, dest, msg)).start()
 
     def handle_broadcast_msg(self, id, dest, info):
         src = self.find_client_by_addr(dest)
@@ -186,26 +250,69 @@ class Server:
         self.sock.sendto(resp, dest)
 
         # broadcast
-        for client, [ip, port, online] in self.clients.items():
-            online = self.clients[client][2]
-
-            if client != src and online:
-                data = f"{src} {info}"
-                resp, id = make(BROADCAST_MSG, data)
-                self.sock.sendto(resp, (ip, port))
-                self.logger.info(
-                    f"broadcast message from {src} to {client}: {shorten_msg(info)}"
-                )
-
-                # TODO: use another thread to check for timeout
-                self.record(id, (ip, port), BROADCAST_MSG, data)
-            elif client != src and not online:
-                self.save_msg(src, client, info, typ=CHANNEL_MESSAGE)
+        for client in list(self.clients):
+            if client != src:
+                self.broadcast_chat(src, client, info)
 
     def handle_ack_broadcast_msg(self, id, dest, info):
         self.rm_record(id)
 
+    # All timeout handlers are called with lock held
+    def timeout_broadcast_msg(self, id, dest, info):
+        resp, id = make(STATUS)
+        self.sock.sendto(resp, dest)
+        self.record(id, dest, STATUS, "")
+
+        def callback(id, dest, info):
+            self.wait_status(id)
+
+            # we now know the status of the client @ dest
+            # we now broacast_chat (save if client offline, otherwise broadcast)
+            self.mu.acquire()
+            to_cli = self.find_client_by_addr(dest)
+            [from_cli, chat] = info.split(" ", maxsplit=1)
+
+            self.broadcast_chat(from_cli, to_cli, chat)
+            self.mu.release()
+
+        # use a separate thread to perform actions
+        # after status is acked or timed out
+        Thread(target=callback, args=(id, dest, info)).start()
+
+    def timeout_status(self, id, dest, info):
+        # update client status, broadcast updated status
+        client = self.find_client_by_addr(dest)
+        prev_status = self.clients[client][2]
+        self.logger.info(
+            f"The client {client} didn't ack STATUS in time (500ms).")
+
+        if prev_status:
+            self.clients[client][2] = False
+            self.broadcast_client_info(client)
+
+    def timeout(self):
+        while not self.done:
+            now = get_ts()
+
+            self.mu.acquire()
+
+            for id in list(self.inflight):
+                (ts, addr, typ, data) = self.inflight[id]
+                has_timeout = timeout(ts, now)
+
+                if has_timeout:
+                    self.logger.info(
+                        f"Message {id} timed out, dispatching timeout handler")
+
+                    self.timeout_handlers[typ](id, addr, data)
+                    del self.inflight[id]
+
+            self.mu.release()
+
+            time.sleep(TIMEOUT / 1000)
+
     def stop(self):
+        self.done = True
         self.sock.close()
         self.logger.info("server gracefully exited")
 
@@ -216,8 +323,15 @@ class Server:
 
         self.logger.info(f"created UDP socket, bound to port {self.port}")
 
+        listener = Thread(target=self.handle_requests, name="req_handler")
+        timeout = Thread(target=self.timeout, name="timeout")
+
+        listener.start()
+        timeout.start()
+
         try:
-            self.handle_requests()
+            listener.join()
+            timeout.join()
         except KeyboardInterrupt:
             self.logger.info("keyboard interrupt! closing socket...")
             self.stop()

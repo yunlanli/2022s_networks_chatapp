@@ -35,7 +35,8 @@ class Client:
             NACK_SAVE_MSG: self.handle_nack_save,
             OFFLINE_MSG: self.handle_offline_chat_msg,
             ACK_BROADCAST_MSG: self.handle_ack_broadcast_msg,
-            BROADCAST_MSG: self.handle_broadcast_msg
+            BROADCAST_MSG: self.handle_broadcast_msg,
+            STATUS: self.handle_status
         }
         self.timeout_handlers = {
             DEREGISTER: self.timeout_deregister,
@@ -247,6 +248,15 @@ class Client:
         self.peers[self.username][2] = False
         self.rm_record(id)
 
+    def handle_status(self, id, addr, message):
+        online = self.peers[self.username][2]
+        self.logger.info(
+            f"Received STATUS inquiry, send to server our online status: {online}"
+        )
+
+        resp, _ = make(ACK_STATUS, json.dumps(online), id=id)
+        self.sock.sendto(resp, addr)
+
     def register(self):
         # register under self.username at the server
         info = json.dumps([self.username, True])
@@ -264,7 +274,7 @@ class Client:
         self.send_offline_chat(data)
 
     def timeout_save(self, id, addr, data):
-        # TODO
+        # Not mandatory to implement -> no op
         pass
 
     def timeout_broadcast_msg(self, id, addr, data):
