@@ -137,9 +137,9 @@ class Client:
             self.udp_send(CHAT_MSG, msg, dest=peer, max_retry=0)
             self.logger.info(f"{peer} online, sending: {shorten_msg(msg)}")
 
-    def send_offline_chat(self, msg, peer=None):
+    def send_offline_chat(self, msg, peer=None, lock=False):
         data = f"{peer} {msg}" if peer is not None else msg
-        self.udp_send(SAVE_MSG, data, max_retry=0)
+        self.udp_send(SAVE_MSG, data, max_retry=0, locked=lock)
         self.logger.info(
             f"{peer} offline/timeout, send SAVE_MSG to server: {shorten_msg(msg)}"
         )
@@ -273,7 +273,8 @@ class Client:
         self.stop()
 
     def timeout_chat(self, id, addr, data):
-        self.send_offline_chat(data)
+        to_cli = self.find_user_by_addr(addr)
+        self.send_offline_chat(data, to_cli, lock=True)
 
     def timeout_save(self, id, addr, data):
         # Not mandatory to implement -> no op

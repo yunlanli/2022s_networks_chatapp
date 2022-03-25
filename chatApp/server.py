@@ -217,8 +217,9 @@ class Server:
 
         # check the status of the client
         resp, status_id = make(STATUS)
-        self.sock.sendto(resp, dest)
-        self.record(status_id, dest, STATUS, "")
+        to_cli_addr = (self.clients[to][0], self.clients[to][1])
+        self.sock.sendto(resp, to_cli_addr)
+        self.record(status_id, to_cli_addr, STATUS, "")
 
         def callback(from_cli, to_cli, status_id, save_id, dest, msg):
             self.wait_status(status_id)
