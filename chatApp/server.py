@@ -142,7 +142,7 @@ class Server:
                 self.logger.info(
                     f"client {name} @ {ip}:{port} already registered -> no op, sending ack."
                 )
-                resp, _ = make(ACK_REG, id=id)
+                resp, _ = make(ACK_REG, json.dumps(self.clients), id=id)
                 self.sock.sendto(resp, dest)
             else:
                 # client went back online

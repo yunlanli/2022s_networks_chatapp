@@ -123,7 +123,7 @@ class Client:
             elif send_all is not None:
                 self.send_all(send_all.group('msg'))
             else:
-                self.logger.error(f"unrecognied command: \"{message}\"")
+                self.logger.error(f"unrecognized command: \"{message}\"")
 
     def send_chat(self, peer, msg):
         if peer not in self.peers:
