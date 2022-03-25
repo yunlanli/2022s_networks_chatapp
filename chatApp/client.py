@@ -336,11 +336,14 @@ class Client:
         self.register()
 
         listener = threading.Thread(target=self.listen,
-                                    name=f"{self.username}-listener")
+                                    name=f"{self.username}-listener",
+                                    daemon=True)
         sender = threading.Thread(target=self.send,
-                                  name=f"{self.username}-sender")
+                                  name=f"{self.username}-sender",
+                                  daemon=True)
         timer = threading.Thread(target=self.timeout,
-                                 name=f"{self.username}-timer")
+                                 name=f"{self.username}-timer",
+                                 daemon=True)
 
         listener.start()
         sender.start()

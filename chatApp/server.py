@@ -239,7 +239,8 @@ class Server:
             self.mu.release()
 
         Thread(target=callback,
-               args=(src, to, status_id, id, dest, msg)).start()
+               args=(src, to, status_id, id, dest, msg),
+               daemon=True).start()
 
     def handle_broadcast_msg(self, id, dest, info):
         src = self.find_client_by_addr(dest)
@@ -277,7 +278,7 @@ class Server:
 
         # use a separate thread to perform actions
         # after status is acked or timed out
-        Thread(target=callback, args=(id, dest, info)).start()
+        Thread(target=callback, args=(id, dest, info), daemon=True).start()
 
     def timeout_status(self, id, dest, info):
         # update client status, broadcast updated status
@@ -323,8 +324,10 @@ class Server:
 
         self.logger.info(f"created UDP socket, bound to port {self.port}")
 
-        listener = Thread(target=self.handle_requests, name="req_handler")
-        timeout = Thread(target=self.timeout, name="timeout")
+        listener = Thread(target=self.handle_requests,
+                          name="req_handler",
+                          daemon=True)
+        timeout = Thread(target=self.timeout, name="timeout", daemon=True)
 
         listener.start()
         timeout.start()
