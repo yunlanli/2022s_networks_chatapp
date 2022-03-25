@@ -22,6 +22,18 @@ Run the program:
   ChatApp -c <name> <server-ip> <server-port> <client-port>
   ```
 
+## Demo
+
+1. demonstration of basic functionalities: send, send_all, reg, dereg, silent leave, error detection, etc
+
+![demo_1](https://user-images.githubusercontent.com/25857014/160049908-56fe4eee-d009-4c62-8a37-ace42461232c.png)
+
+
+2. demonstartion of timeout, retry, silent leave, save message
+
+![silent_leave](https://user-images.githubusercontent.com/25857014/160049914-c4bd08be-5c71-440d-b7a5-e52720efd1da.png)
+
+
 # Features
 
 - [x] Registration (silent leave, notified leave)
@@ -63,6 +75,5 @@ Both the client and server contains a dictionary of **message handlers** and **t
 ## UDP Message Format
 
   A message contains type, id and content, deliminited by space. All messages are created using the helper function `make` and parsed with `parse` in /chatApp/message.py.
-
 
 [1]: https://docs.python.org/3/library/uuid.html
